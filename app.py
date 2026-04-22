@@ -2,36 +2,63 @@ import streamlit as st
 from pptx import Presentation
 import io
 from datetime import datetime
+from PIL import Image
 
 # --- CONFIGURATION DU MOT DE PASSE ---
-# Vous pouvez modifier ce mot de passe ici pour votre équipe
-MOT_DE_PASSE_ENTREPRISE = "ETECHNOLOGIE" 
+MOT_DE_PASSE_ENTREPRISE = "ETECHNOLOGIE"
 
-# --- 1. MOTEUR DE REMPLISSAGE (Conservation du style et des polices) ---
+
+# --- NORMALISATION IMAGE (IMPORTANT POUR MOBILE) ---
+def normaliser_image(file):
+    img = Image.open(file)
+    img = img.convert("RGB")
+    output = io.BytesIO()
+    img.save(output, format="JPEG", quality=95)
+    output.seek(0)
+    return output
+
+
+# --- 1. MOTEUR DE REMPLISSAGE ---
 def generer_rapport(donnees, photos, template_path):
     try:
         prs = Presentation(template_path)
     except Exception as e:
         st.error(f"Erreur : Impossible de charger 'template.pptx'. ({e})")
         return None
-    
+
     for slide in prs.slides:
         for shape in slide.shapes:
-            # TRAITEMENT DU TEXTE (Conservation de la police via les 'runs')
+
+            # --- TEXTE (VIDE SI AUCUNE VALEUR) ---
             if shape.has_text_frame:
                 for balise, valeur in donnees.items():
+
+                    if valeur is None or str(valeur).strip() == "":
+                        replacement = ""
+                    else:
+                        replacement = str(valeur).strip()
+
                     if balise in shape.text:
                         for paragraph in shape.text_frame.paragraphs:
                             for run in paragraph.runs:
                                 if balise in run.text:
-                                    run.text = run.text.replace(balise, str(valeur) if valeur else "")
+                                    run.text = run.text.replace(balise, replacement)
 
-            # TRAITEMENT DES IMAGES (Via le nom d'objet dans le Volet de sélection)
+            # --- IMAGES (POSITION FIXE TEMPLATE) ---
             if shape.name in photos and photos[shape.name] is not None:
-                photo_file = photos[shape.name]
+                photo_file = normaliser_image(photos[shape.name])
+
                 left, top, width, height = shape.left, shape.top, shape.width, shape.height
-                slide.shapes.add_picture(photo_file, left, top, width, height)
-                # Suppression du rectangle de repère
+
+                img = slide.shapes.add_picture(photo_file, left, top)
+
+                # FORCER POSITION EXACTE DU TEMPLATE
+                img.left = left
+                img.top = top
+                img.width = width
+                img.height = height
+
+                # supprimer placeholder
                 sp = shape._element
                 sp.getparent().remove(sp)
 
@@ -40,7 +67,8 @@ def generer_rapport(donnees, photos, template_path):
     pptx_io.seek(0)
     return pptx_io
 
-# --- 2. GESTION DE LA SÉCURITÉ ---
+
+# --- 2. AUTHENTIFICATION ---
 def est_authentifie():
     if "auth" not in st.session_state:
         st.session_state["auth"] = False
@@ -48,6 +76,7 @@ def est_authentifie():
     if not st.session_state["auth"]:
         st.markdown("### 🔒 Accès Sécurisé - Audit Environnemental")
         mdp = st.text_input("Veuillez entrer le mot de passe entreprise :", type="password")
+
         if st.button("Se connecter"):
             if mdp == MOT_DE_PASSE_ENTREPRISE:
                 st.session_state["auth"] = True
@@ -55,10 +84,13 @@ def est_authentifie():
             else:
                 st.error("Mot de passe incorrect.")
         return False
+
     return True
 
-# --- 3. INTERFACE UTILISATEUR ---
+
+# --- 3. INTERFACE ---
 if est_authentifie():
+
     st.set_page_config(page_title="Audit Site Telecom", layout="wide")
     st.title("📱 Rapport d'Audit Environnemental Automatisé")
 
@@ -66,14 +98,13 @@ if est_authentifie():
     photos = {}
     date_du_jour = datetime.now().strftime("%d-%m-%Y")
 
-    # Création des 9 onglets
     tabs = st.tabs([
-        "📍 INFOS SITE", "📸 VUE GENERALE", "🛡️ SECURITE", 
-        "🧹 PROPRETE", "🏗️ PYLÔNE & EQUIP.", "⚡ ELECTRICITE", 
+        "📍 INFOS SITE", "📸 VUE GENERALE", "🛡️ SECURITE",
+        "🧹 PROPRETE", "🏗️ PYLÔNE & EQUIP.", "⚡ ELECTRICITE",
         "⚙️ GE", "❄️ CLIMATISATION", "⚠️ ANOMALIES"
     ])
 
-    # 1. INFORMATIONS DU SITE
+    # --- INFOS SITE ---
     with tabs[0]:
         donnees["INS_NOM"] = st.text_input("Nom du site")
         donnees["INS_CODE"] = st.text_input("Code du site")
@@ -82,108 +113,67 @@ if est_authentifie():
         donnees["INS_CHEF"] = st.text_input("Chef d'équipes")
         donnees["INS_INSCONTACT"] = st.text_input("Contact")
 
-    # 2. VUE GENERALE DU SITE
+    # --- VUE GENERALE ---
     with tabs[1]:
         photos["INS_VUE_DU_SITE"] = st.file_uploader("VUE DU SITE", type=['jpg','png','jpeg'])
-        photos["INS_PLAQUE"] = st.file_uploader("PLAQUE D'IMMATRICULATION", type=['jpg','png','jpeg'])
-        st.write("VUE GENERALE (3 photos)")
-        c1, c2, c3 = st.columns(3)
-        photos["INS_SITE1"] = c1.file_uploader("Photo Site 1", type=['jpg'], key="s1")
-        photos["INS_SITE2"] = c2.file_uploader("Photo Site 2", type=['jpg'], key="s2")
-        photos["INS_SITE3"] = c3.file_uploader("Photo Site 3", type=['jpg'], key="s3")
+        photos["INS_PLAQUE"] = st.file_uploader("PLAQUE", type=['jpg','png','jpeg'])
 
-    # 3. SECURITE DU SITE
+        c1, c2, c3 = st.columns(3)
+        photos["INS_SITE1"] = c1.file_uploader("Site 1", type=['jpg'])
+        photos["INS_SITE2"] = c2.file_uploader("Site 2", type=['jpg'])
+        photos["INS_SITE3"] = c3.file_uploader("Site 3", type=['jpg'])
+
+    # --- SECURITE ---
     with tabs[2]:
-        photos["INS_ACCES"] = st.file_uploader("ACCES AU SITE", type=['jpg'])
+        photos["INS_ACCES"] = st.file_uploader("ACCES", type=['jpg'])
         photos["INS_PORTAIL"] = st.file_uploader("PORTAIL", type=['jpg'])
-        photos["INS_SERRURE"] = st.file_uploader("SERRURE DU PORTAIL", type=['jpg'])
-        st.write("CLOTURE & GUERITE")
-        c1, c2, c3 = st.columns(3)
-        photos["INS_CLO1"] = c1.file_uploader("Clôture 1", type=['jpg'], key="cl1")
-        photos["INS_CLO2"] = c2.file_uploader("Clôture 2", type=['jpg'], key="cl2")
-        photos["INS_CLO3"] = c3.file_uploader("Clôture 3", type=['jpg'], key="cl3")
-        photos["INS_GUERITE1"] = c1.file_uploader("Vue Ext. Guérite", type=['jpg'])
-        photos["INS_GUERITE2"] = c2.file_uploader("Vue Int. Guérite", type=['jpg'])
-        photos["INS_GUERITE3"] = c3.file_uploader("Système Verrouillage", type=['jpg'])
+        photos["INS_SERRURE"] = st.file_uploader("SERRURE", type=['jpg'])
 
-    # 4. PROPRETE GENERALE
+    # --- PROPRETE ---
     with tabs[3]:
-        photos["INS_PROPRE"] = st.file_uploader("VUE PROPRETE GENERALE", type=['jpg'])
-        photos["INS_DRAIN1"] = st.file_uploader("POINT DE DRAINAGE", type=['jpg'])
-        photos["INS_DRAIN2"] = st.file_uploader("VUE POINT EVACUATION EAU", type=['jpg'])
-        photos["INS_DRAIN3"] = st.file_uploader("VUE EPANDAGE", type=['jpg'])
+        photos["INS_PROPRE"] = st.file_uploader("PROPRETE", type=['jpg'])
 
-    # 5. PYLÔNE ET EQUIPEMENTS
+    # --- PYLONE ---
     with tabs[4]:
-        st.write("FONDATIONS & ANCRAGES")
-        c1, c2, c3 = st.columns(3)
-        photos["INS_FONDA1"] = c1.file_uploader("Fondation 1", type=['jpg'], key="f1")
-        photos["INS_FONDA2"] = c2.file_uploader("Fondation 2", type=['jpg'], key="f2")
-        photos["INS_FONDA3"] = c3.file_uploader("Fondation 3", type=['jpg'], key="f3")
-        st.write("EQUIPEMENTS & RACKS")
-        photos["EQUIP1"] = c1.file_uploader("Equipement 1", type=['jpg'], key="e1")
-        photos["EQUIP2"] = c2.file_uploader("Equipement 2", type=['jpg'], key="e2")
-        photos["EQUIP3"] = c3.file_uploader("Equipement 3", type=['jpg'], key="e3")
+        photos["INS_FONDA1"] = st.file_uploader("Fondation", type=['jpg'])
 
-    # 6. ELECTRICITE
+    # --- ELECTRICITE ---
     with tabs[5]:
-        c1, c2, c3 = st.columns(3)
-        photos["INS_CIE1"] = c1.file_uploader("Intérieur Niche", type=['jpg'])
-        photos["INS_CIE2"] = c2.file_uploader("Compteur CIE", type=['jpg'])
-        photos["INS_CIE3"] = c3.file_uploader("Extérieur Niche", type=['jpg'])
+        photos["INS_CIE1"] = st.file_uploader("CIE", type=['jpg'])
         photos["INS_TGBT"] = st.file_uploader("TGBT", type=['jpg'])
-        photos["INS_COF"] = st.file_uploader("COFFRET INVERSEUR", type=['jpg'])
 
-    # 7. GROUPE ELECTROGENE
+    # --- GE ---
     with tabs[6]:
-        c1, c2 = st.columns(2)
-        photos["INS_MOTEUR"] = c1.file_uploader("DE FACE DU GE", type=['jpg'])
-        photos["INS_GE_LAT"] = c2.file_uploader("LATERAL DU GE", type=['jpg'])
-        photos["INS_GE_FACE"] = c1.file_uploader("VUE MOTEUR", type=['jpg'])
-        photos["INS_TANK"] = c2.file_uploader("VUE DU TANK", type=['jpg'])
-        photos["INS_COMPT"] = c1.file_uploader("VUE COMPTEUR HORAIRE", type=['jpg'])
-        photos["INS_RAD"] = c2.file_uploader("VUE RADIATEUR", type=['jpg'])
-        photos["INS_FILTRE"] = c1.file_uploader("VUE FILTRES", type=['jpg'])
-        photos["INS_INT_GE"] = c2.file_uploader("VUE INTERIEUR GE", type=['jpg'])
-        
+        photos["INS_MOTEUR"] = st.file_uploader("GE Face", type=['jpg'])
+
         donnees["INS_MARQUE_GE"] = st.text_input("Marque GE")
         donnees["INS_VAL_H"] = st.text_input("Heures Compteur")
-        donnees["INS_VAL_CARB"] = st.text_input("Niveau Carburant (%)")
-        donnees["INS_VAL_PUISS"] = st.text_input("Puissance GE")
-        donnees["INS_MARQUE_MOT"] = st.text_input("Marque Moteur")
-        donnees["INS_RES"] = st.text_input("Capacité Réservoir")
+        donnees["INS_VAL_CARB"] = st.text_input("Carburant (%)")
 
-    # 8. CLIMATISATION
+    # --- CLIM ---
     with tabs[7]:
-        c1, c2, c3 = st.columns(3)
-        photos["INS_CLIM1"] = c1.file_uploader("AVANT LAVAGE", type=['jpg'])
-        photos["INS_CLIM2"] = c2.file_uploader("PENDANT LAVAGE", type=['jpg'])
-        photos["INS_CLIM3"] = c3.file_uploader("APRES LAVAGE", type=['jpg'])
+        photos["INS_CLIM1"] = st.file_uploader("Clim", type=['jpg'])
 
-    # 9. ANOMALIES & BOUTON FINAL
+    # --- ANOMALIES + GENERATION ---
     with tabs[8]:
-        st.write("PHOTOS ANOMALIES")
-        c1, c2, c3 = st.columns(3)
-        photos["INS_AN1"] = c1.file_uploader("Anomalie 1", type=['jpg'])
-        photos["INS_AN2"] = c2.file_uploader("Anomalie 2", type=['jpg'])
-        photos["INS_AN3"] = c3.file_uploader("Anomalie 3", type=['jpg'])
-        
+        photos["INS_AN1"] = st.file_uploader("Anomalie 1", type=['jpg'])
         donnees["INS_REMARQUES"] = st.text_area("Remarques Finales")
 
-        st.markdown("---")
-        if st.button("🚀 GÉNÉRER LE RAPPORT FINAL", use_container_width=True):
+        if st.button("🚀 GÉNÉRER LE RAPPORT", use_container_width=True):
+
             if not donnees["INS_CODE"] or not donnees["INS_NOM"]:
-                st.error("⚠️ Erreur : Le Nom et le Code du site sont obligatoires.")
+                st.error("Nom et Code du site obligatoires")
             else:
-                with st.spinner("Génération du PowerPoint..."):
+                with st.spinner("Génération en cours..."):
                     output = generer_rapport(donnees, photos, "template.pptx")
+
                     if output:
-                        # Nom du fichier dynamique : RAPPORT + CODE + NOM + DATE
-                        nom_fichier = f"RAPPORT D AUDIT ENVIRONEMENTAL {donnees['INS_CODE']} {donnees['INS_NOM']} {date_du_jour}.pptx"
-                        
-                        st.success("✅ Rapport généré !")
+                        nom_fichier = f"RAPPORT AUDIT {donnees['INS_CODE']} {donnees['INS_NOM']} {date_du_jour}.pptx"
+
+                        st.success("Rapport généré !")
+
                         st.download_button(
-                            label="📥 Télécharger le Rapport (.pptx)",
+                            "📥 Télécharger",
                             data=output,
                             file_name=nom_fichier,
                             mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"

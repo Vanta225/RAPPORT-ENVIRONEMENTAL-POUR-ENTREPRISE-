@@ -5,7 +5,7 @@ from datetime import datetime
 
 # --- CONFIGURATION DU MOT DE PASSE ---
 # Vous pouvez modifier ce mot de passe ici pour votre équipe
-MOT_DE_PASSE_ENTREPRISE = "TELECOM225" 
+MOT_DE_PASSE_ENTREPRISE = "ETECHNOLOGIE" 
 
 # --- 1. MOTEUR DE REMPLISSAGE (Conservation du style et des polices) ---
 def generer_rapport(donnees, photos, template_path):

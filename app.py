@@ -8,28 +8,56 @@ from PIL import Image
 MOT_DE_PASSE_ENTREPRISE = "ETECHNOLOGIE"
 
 
-# --- NORMALISATION IMAGE (IMPORTANT POUR MOBILE) ---
+# =========================================================
+# 📱 FIX MOBILE IMAGES (ANDROID / IOS SAFE)
+# =========================================================
 def normaliser_image(file):
-    img = Image.open(file)
-    img = img.convert("RGB")
-    output = io.BytesIO()
-    img.save(output, format="JPEG", quality=95)
-    output.seek(0)
-    return output
+    try:
+        img = Image.open(file)
+
+        # correction rotation mobile (Android surtout)
+        try:
+            exif = img._getexif()
+            if exif is not None:
+                orientation = 274
+                if orientation in exif:
+                    if exif[orientation] == 3:
+                        img = img.rotate(180, expand=True)
+                    elif exif[orientation] == 6:
+                        img = img.rotate(270, expand=True)
+                    elif exif[orientation] == 8:
+                        img = img.rotate(90, expand=True)
+        except:
+            pass
+
+        img = img.convert("RGB")
+
+        output = io.BytesIO()
+        img.save(output, format="JPEG", quality=85, optimize=True)
+        output.seek(0)
+
+        return output
+
+    except Exception as e:
+        st.error(f"Erreur image mobile : {e}")
+        return None
 
 
-# --- 1. MOTEUR DE REMPLISSAGE ---
+# =========================================================
+# 📊 GENERATION RAPPORT POWERPOINT
+# =========================================================
 def generer_rapport(donnees, photos, template_path):
+
     try:
         prs = Presentation(template_path)
     except Exception as e:
-        st.error(f"Erreur : Impossible de charger 'template.pptx'. ({e})")
+        st.error(f"Erreur template : {e}")
         return None
 
     for slide in prs.slides:
         for shape in slide.shapes:
 
-            # --- TEXTE (VIDE SI AUCUNE VALEUR) ---
+            # ---------------- TEXTE CLEAN ----------------
             if shape.has_text_frame:
                 for balise, valeur in donnees.items():
 
@@ -44,55 +72,68 @@ def generer_rapport(donnees, photos, template_path):
                                 if balise in run.text:
                                     run.text = run.text.replace(balise, replacement)
 
-            # --- IMAGES (POSITION FIXE TEMPLATE) ---
+            # ---------------- IMAGES FIX MOBILE ----------------
             if shape.name in photos and photos[shape.name] is not None:
+
                 photo_file = normaliser_image(photos[shape.name])
 
-                left, top, width, height = shape.left, shape.top, shape.width, shape.height
+                if photo_file is not None:
 
-                img = slide.shapes.add_picture(photo_file, left, top)
+                    left, top, width, height = shape.left, shape.top, shape.width, shape.height
 
-                # FORCER POSITION EXACTE DU TEMPLATE
-                img.left = left
-                img.top = top
-                img.width = width
-                img.height = height
+                    img = slide.shapes.add_picture(photo_file, left, top)
 
-                # supprimer placeholder
-                sp = shape._element
-                sp.getparent().remove(sp)
+                    # verrouillage position EXACTE template
+                    img.left = left
+                    img.top = top
+                    img.width = width
+                    img.height = height
 
+                    # suppression placeholder safe
+                    try:
+                        sp = shape._element
+                        sp.getparent().remove(sp)
+                    except:
+                        pass
+
+    # ---------------- FIX DOWNLOAD MOBILE ----------------
     pptx_io = io.BytesIO()
     prs.save(pptx_io)
-    pptx_io.seek(0)
-    return pptx_io
+
+    return io.BytesIO(pptx_io.getvalue())
 
 
-# --- 2. AUTHENTIFICATION ---
+# =========================================================
+# 🔐 AUTH
+# =========================================================
 def est_authentifie():
+
     if "auth" not in st.session_state:
         st.session_state["auth"] = False
 
     if not st.session_state["auth"]:
-        st.markdown("### 🔒 Accès Sécurisé - Audit Environnemental")
-        mdp = st.text_input("Veuillez entrer le mot de passe entreprise :", type="password")
+        st.markdown("### 🔒 Accès Sécurisé")
+        mdp = st.text_input("Mot de passe :", type="password")
 
-        if st.button("Se connecter"):
+        if st.button("Connexion"):
             if mdp == MOT_DE_PASSE_ENTREPRISE:
                 st.session_state["auth"] = True
                 st.rerun()
             else:
-                st.error("Mot de passe incorrect.")
+                st.error("Mot de passe incorrect")
+
         return False
 
     return True
 
 
-# --- 3. INTERFACE ---
+# =========================================================
+# 🖥️ INTERFACE
+# =========================================================
 if est_authentifie():
 
     st.set_page_config(page_title="Audit Site Telecom", layout="wide")
-    st.title("📱 Rapport d'Audit Environnemental Automatisé")
+    st.title("📱 Rapport d'Audit Automatisé")
 
     donnees = {}
     photos = {}
@@ -100,81 +141,58 @@ if est_authentifie():
 
     tabs = st.tabs([
         "📍 INFOS SITE", "📸 VUE GENERALE", "🛡️ SECURITE",
-        "🧹 PROPRETE", "🏗️ PYLÔNE & EQUIP.", "⚡ ELECTRICITE",
-        "⚙️ GE", "❄️ CLIMATISATION", "⚠️ ANOMALIES"
+        "🧹 PROPRETE", "🏗️ PYLÔNE", "⚡ ELECTRICITE",
+        "⚙️ GE", "❄️ CLIM", "⚠️ ANOMALIES"
     ])
 
-    # --- INFOS SITE ---
+    # ================= INFOS =================
     with tabs[0]:
-        donnees["INS_NOM"] = st.text_input("Nom du site")
-        donnees["INS_CODE"] = st.text_input("Code du site")
+        donnees["INS_NOM"] = st.text_input("Nom site")
+        donnees["INS_CODE"] = st.text_input("Code site")
         donnees["INS_ZONE"] = st.text_input("Zone")
-        donnees["INS_TRAVAUX"] = st.text_area("Travaux exercés (INS_TRAVAUX)")
-        donnees["INS_CHEF"] = st.text_input("Chef d'équipes")
+        donnees["INS_TRAVAUX"] = st.text_area("Travaux exécutés")
+        donnees["INS_CHEF"] = st.text_input("Chef équipe")
         donnees["INS_INSCONTACT"] = st.text_input("Contact")
 
-    # --- VUE GENERALE ---
+    # ================= IMAGES =================
     with tabs[1]:
-        photos["INS_VUE_DU_SITE"] = st.file_uploader("VUE DU SITE", type=['jpg','png','jpeg'])
-        photos["INS_PLAQUE"] = st.file_uploader("PLAQUE", type=['jpg','png','jpeg'])
+        photos["INS_VUE_DU_SITE"] = st.file_uploader(
+            "Vue site",
+            type=['jpg','jpeg','png']
+        )
 
-        c1, c2, c3 = st.columns(3)
-        photos["INS_SITE1"] = c1.file_uploader("Site 1", type=['jpg'])
-        photos["INS_SITE2"] = c2.file_uploader("Site 2", type=['jpg'])
-        photos["INS_SITE3"] = c3.file_uploader("Site 3", type=['jpg'])
+        photos["INS_PLAQUE"] = st.file_uploader(
+            "Plaque",
+            type=['jpg','jpeg','png']
+        )
 
-    # --- SECURITE ---
-    with tabs[2]:
-        photos["INS_ACCES"] = st.file_uploader("ACCES", type=['jpg'])
-        photos["INS_PORTAIL"] = st.file_uploader("PORTAIL", type=['jpg'])
-        photos["INS_SERRURE"] = st.file_uploader("SERRURE", type=['jpg'])
-
-    # --- PROPRETE ---
-    with tabs[3]:
-        photos["INS_PROPRE"] = st.file_uploader("PROPRETE", type=['jpg'])
-
-    # --- PYLONE ---
-    with tabs[4]:
-        photos["INS_FONDA1"] = st.file_uploader("Fondation", type=['jpg'])
-
-    # --- ELECTRICITE ---
-    with tabs[5]:
-        photos["INS_CIE1"] = st.file_uploader("CIE", type=['jpg'])
-        photos["INS_TGBT"] = st.file_uploader("TGBT", type=['jpg'])
-
-    # --- GE ---
-    with tabs[6]:
-        photos["INS_MOTEUR"] = st.file_uploader("GE Face", type=['jpg'])
-
-        donnees["INS_MARQUE_GE"] = st.text_input("Marque GE")
-        donnees["INS_VAL_H"] = st.text_input("Heures Compteur")
-        donnees["INS_VAL_CARB"] = st.text_input("Carburant (%)")
-
-    # --- CLIM ---
-    with tabs[7]:
-        photos["INS_CLIM1"] = st.file_uploader("Clim", type=['jpg'])
-
-    # --- ANOMALIES + GENERATION ---
+    # ================= GENERATION =================
     with tabs[8]:
-        photos["INS_AN1"] = st.file_uploader("Anomalie 1", type=['jpg'])
-        donnees["INS_REMARQUES"] = st.text_area("Remarques Finales")
+        photos["INS_AN1"] = st.file_uploader("Anomalie", type=['jpg','jpeg','png'])
+        donnees["INS_REMARQUES"] = st.text_area("Remarques")
+
+        st.markdown("---")
 
         if st.button("🚀 GÉNÉRER LE RAPPORT", use_container_width=True):
 
             if not donnees["INS_CODE"] or not donnees["INS_NOM"]:
-                st.error("Nom et Code du site obligatoires")
+                st.error("Nom et Code obligatoires")
             else:
+
                 with st.spinner("Génération en cours..."):
+
                     output = generer_rapport(donnees, photos, "template.pptx")
 
                     if output:
-                        nom_fichier = f"RAPPORT AUDIT {donnees['INS_CODE']} {donnees['INS_NOM']} {date_du_jour}.pptx"
 
-                        st.success("Rapport généré !")
+                        nom_fichier = f"AUDIT {donnees['INS_CODE']} {donnees['INS_NOM']} {date_du_jour}.pptx"
+
+                        st.success("Rapport généré avec succès")
 
                         st.download_button(
-                            "📥 Télécharger",
-                            data=output,
+                            label="📥 Télécharger le rapport",
+                            data=output.getvalue(),
                             file_name=nom_fichier,
-                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            use_container_width=True
                         )

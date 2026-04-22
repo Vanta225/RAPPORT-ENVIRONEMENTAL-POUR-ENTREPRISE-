@@ -4,18 +4,20 @@ import io
 from datetime import datetime
 from PIL import Image
 
-# --- CONFIGURATION DU MOT DE PASSE ---
+# =========================================================
+# 🔐 MOT DE PASSE
+# =========================================================
 MOT_DE_PASSE_ENTREPRISE = "ETECHNOLOGIE"
 
 
 # =========================================================
-# 📱 FIX MOBILE IMAGES (ANDROID / IOS SAFE)
+# 📱 FIX MOBILE IMAGE (ANDROID / IOS STABLE)
 # =========================================================
 def normaliser_image(file):
     try:
         img = Image.open(file)
 
-        # correction rotation mobile (Android surtout)
+        # correction rotation mobile
         try:
             exif = img._getexif()
             if exif is not None:
@@ -32,39 +34,33 @@ def normaliser_image(file):
 
         img = img.convert("RGB")
 
-        output = io.BytesIO()
-        img.save(output, format="JPEG", quality=85, optimize=True)
-        output.seek(0)
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=85, optimize=True)
+        buffer.seek(0)
 
-        return output
+        return buffer
 
-    except Exception as e:
-        st.error(f"Erreur image mobile : {e}")
+    except:
         return None
 
 
 # =========================================================
-# 📊 GENERATION RAPPORT POWERPOINT
+# 📊 GENERATION RAPPORT PPT
 # =========================================================
 def generer_rapport(donnees, photos, template_path):
 
-    try:
-        prs = Presentation(template_path)
-    except Exception as e:
-        st.error(f"Erreur template : {e}")
-        return None
+    prs = Presentation(template_path)
 
     for slide in prs.slides:
         for shape in slide.shapes:
 
-            # ---------------- TEXTE CLEAN ----------------
+            # =================================================
+            # 🧾 TEXTE PROPRE
+            # =================================================
             if shape.has_text_frame:
                 for balise, valeur in donnees.items():
 
-                    if valeur is None or str(valeur).strip() == "":
-                        replacement = ""
-                    else:
-                        replacement = str(valeur).strip()
+                    replacement = str(valeur).strip() if valeur else ""
 
                     if balise in shape.text:
                         for paragraph in shape.text_frame.paragraphs:
@@ -72,31 +68,29 @@ def generer_rapport(donnees, photos, template_path):
                                 if balise in run.text:
                                     run.text = run.text.replace(balise, replacement)
 
-            # ---------------- IMAGES FIX MOBILE ----------------
+            # =================================================
+            # 🖼️ IMAGES SUR CASE (SANS SUPPRESSION TEMPLATE)
+            # =================================================
             if shape.name in photos and photos[shape.name] is not None:
 
                 photo_file = normaliser_image(photos[shape.name])
 
-                if photo_file is not None:
+                if photo_file:
 
-                    left, top, width, height = shape.left, shape.top, shape.width, shape.height
-
-                    img = slide.shapes.add_picture(photo_file, left, top)
-
-                    # verrouillage position EXACTE template
-                    img.left = left
-                    img.top = top
-                    img.width = width
-                    img.height = height
-
-                    # suppression placeholder safe
                     try:
-                        sp = shape._element
-                        sp.getparent().remove(sp)
-                    except:
-                        pass
+                        # ✔️ remplit la case existante (meilleur rendu PPT)
+                        shape.fill.user_picture(photo_file)
 
-    # ---------------- FIX DOWNLOAD MOBILE ----------------
+                    except Exception:
+
+                        # fallback sécurisé
+                        left = shape.left
+                        top = shape.top
+                        width = shape.width
+                        height = shape.height
+
+                        slide.shapes.add_picture(photo_file, left, top, width, height)
+
     pptx_io = io.BytesIO()
     prs.save(pptx_io)
 
@@ -112,10 +106,11 @@ def est_authentifie():
         st.session_state["auth"] = False
 
     if not st.session_state["auth"]:
-        st.markdown("### 🔒 Accès Sécurisé")
-        mdp = st.text_input("Mot de passe :", type="password")
+        st.markdown("### 🔒 Accès Sécurisé - Audit Environnemental")
 
-        if st.button("Connexion"):
+        mdp = st.text_input("Mot de passe entreprise :", type="password")
+
+        if st.button("Se connecter"):
             if mdp == MOT_DE_PASSE_ENTREPRISE:
                 st.session_state["auth"] = True
                 st.rerun()
@@ -128,48 +123,105 @@ def est_authentifie():
 
 
 # =========================================================
-# 🖥️ INTERFACE
+# 🖥️ INTERFACE COMPLETE (9 ONGLETS RESTAURÉS)
 # =========================================================
 if est_authentifie():
 
     st.set_page_config(page_title="Audit Site Telecom", layout="wide")
-    st.title("📱 Rapport d'Audit Automatisé")
+    st.title("📱 Rapport d'Audit Environnemental Automatisé")
 
     donnees = {}
     photos = {}
     date_du_jour = datetime.now().strftime("%d-%m-%Y")
 
+    # =====================================================
+    # 🧭 9 ONGLETS COMPLETS
+    # =====================================================
     tabs = st.tabs([
-        "📍 INFOS SITE", "📸 VUE GENERALE", "🛡️ SECURITE",
-        "🧹 PROPRETE", "🏗️ PYLÔNE", "⚡ ELECTRICITE",
-        "⚙️ GE", "❄️ CLIM", "⚠️ ANOMALIES"
+        "📍 INFOS SITE",
+        "📸 VUE GENERALE",
+        "🛡️ SECURITE",
+        "🧹 PROPRETE",
+        "🏗️ PYLÔNE & EQUIP.",
+        "⚡ ELECTRICITE",
+        "⚙️ GE",
+        "❄️ CLIMATISATION",
+        "⚠️ ANOMALIES"
     ])
 
-    # ================= INFOS =================
+    # =====================================================
+    # 1. INFOS SITE
+    # =====================================================
     with tabs[0]:
-        donnees["INS_NOM"] = st.text_input("Nom site")
-        donnees["INS_CODE"] = st.text_input("Code site")
+        donnees["INS_NOM"] = st.text_input("Nom du site")
+        donnees["INS_CODE"] = st.text_input("Code du site")
         donnees["INS_ZONE"] = st.text_input("Zone")
-        donnees["INS_TRAVAUX"] = st.text_area("Travaux exécutés")
-        donnees["INS_CHEF"] = st.text_input("Chef équipe")
+        donnees["INS_TRAVAUX"] = st.text_area("Travaux exercés")
+        donnees["INS_CHEF"] = st.text_input("Chef d'équipes")
         donnees["INS_INSCONTACT"] = st.text_input("Contact")
 
-    # ================= IMAGES =================
+    # =====================================================
+    # 2. VUE GENERALE
+    # =====================================================
     with tabs[1]:
-        photos["INS_VUE_DU_SITE"] = st.file_uploader(
-            "Vue site",
-            type=['jpg','jpeg','png']
-        )
+        photos["INS_VUE_DU_SITE"] = st.file_uploader("Vue du site", type=['jpg','jpeg','png'])
+        photos["INS_PLAQUE"] = st.file_uploader("Plaque", type=['jpg','jpeg','png'])
 
-        photos["INS_PLAQUE"] = st.file_uploader(
-            "Plaque",
-            type=['jpg','jpeg','png']
-        )
+        c1, c2, c3 = st.columns(3)
+        photos["INS_SITE1"] = c1.file_uploader("Site 1", type=['jpg','jpeg','png'])
+        photos["INS_SITE2"] = c2.file_uploader("Site 2", type=['jpg','jpeg','png'])
+        photos["INS_SITE3"] = c3.file_uploader("Site 3", type=['jpg','jpeg','png'])
 
-    # ================= GENERATION =================
+    # =====================================================
+    # 3. SECURITE
+    # =====================================================
+    with tabs[2]:
+        photos["INS_ACCES"] = st.file_uploader("Accès site", type=['jpg','jpeg','png'])
+        photos["INS_PORTAIL"] = st.file_uploader("Portail", type=['jpg','jpeg','png'])
+        photos["INS_SERRURE"] = st.file_uploader("Serrure", type=['jpg','jpeg','png'])
+
+    # =====================================================
+    # 4. PROPRETE
+    # =====================================================
+    with tabs[3]:
+        photos["INS_PROPRE"] = st.file_uploader("Propreté générale", type=['jpg','jpeg','png'])
+        photos["INS_DRAIN1"] = st.file_uploader("Drainage", type=['jpg','jpeg','png'])
+
+    # =====================================================
+    # 5. PYLÔNE
+    # =====================================================
+    with tabs[4]:
+        photos["INS_FONDA1"] = st.file_uploader("Fondation", type=['jpg','jpeg','png'])
+        photos["EQUIP1"] = st.file_uploader("Équipement", type=['jpg','jpeg','png'])
+
+    # =====================================================
+    # 6. ELECTRICITE
+    # =====================================================
+    with tabs[5]:
+        photos["INS_CIE1"] = st.file_uploader("CIE", type=['jpg','jpeg','png'])
+        photos["INS_TGBT"] = st.file_uploader("TGBT", type=['jpg','jpeg','png'])
+
+    # =====================================================
+    # 7. GE
+    # =====================================================
+    with tabs[6]:
+        photos["INS_MOTEUR"] = st.file_uploader("GE", type=['jpg','jpeg','png'])
+
+        donnees["INS_MARQUE_GE"] = st.text_input("Marque GE")
+        donnees["INS_VAL_H"] = st.text_input("Heures")
+
+    # =====================================================
+    # 8. CLIM
+    # =====================================================
+    with tabs[7]:
+        photos["INS_CLIM1"] = st.file_uploader("Climatisation", type=['jpg','jpeg','png'])
+
+    # =====================================================
+    # 9. ANOMALIES + GENERATION
+    # =====================================================
     with tabs[8]:
-        photos["INS_AN1"] = st.file_uploader("Anomalie", type=['jpg','jpeg','png'])
-        donnees["INS_REMARQUES"] = st.text_area("Remarques")
+        photos["INS_AN1"] = st.file_uploader("Anomalie 1", type=['jpg','jpeg','png'])
+        donnees["INS_REMARQUES"] = st.text_area("Remarques finales")
 
         st.markdown("---")
 
@@ -190,9 +242,8 @@ if est_authentifie():
                         st.success("Rapport généré avec succès")
 
                         st.download_button(
-                            label="📥 Télécharger le rapport",
+                            "📥 Télécharger le rapport",
                             data=output.getvalue(),
                             file_name=nom_fichier,
-                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                            use_container_width=True
+                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
                         )
